@@ -58,14 +58,14 @@ def anno2coco(xml_path: str, img_path: str, out_path: str) -> None:
 
     for f in os.listdir(xml_path):
         cmn = f.split(".")[0]
-        img_file = path_join(img_path, cmn + ".jpg")
+        img_file = cmn + ".jpg"
 
         # clunky XML field parsing for known format
         root = ET.parse(path_join(xml_path, f)).getroot()
 
         for seg in root.findall("size"):
-            width = seg.find("width").text
-            height = seg.find("height").text
+            width  = int(seg.find("width").text)
+            height = int(seg.find("height").text)
 
         for seg in root.findall("object"):
             species = seg.find("name").text
@@ -115,14 +115,14 @@ def test_visuals(out_path: str, split_name: str) -> None:
         print ("writing", out_file)
         cv2.imwrite(out_file, out.get_image()[:,:,::-1])
 
-# class Trainer(DefaultTrainer):
-@classmethod
-def build_evaluator(cls, cfg, dataset_name, output_folder=None):
-    if output_folder is None:
-        path = os.path.join(cfg.OUTPUT_DIR, "evals")
-        os.makedirs(path, exist_ok=True)
-        output_folder = path
-    return COCOEvaluator(dataset_name, cfg, False, output_folder)
+class Trainer(DefaultTrainer):
+    @classmethod
+    def build_evaluator(cls, cfg, dataset_name, output_folder=None):
+        if output_folder is None:
+            path = os.path.join(cfg.OUTPUT_DIR, "evals")
+            os.makedirs(path, exist_ok=True)
+            output_folder = path
+        return COCOEvaluator(dataset_name, cfg, False, output_folder)
 
 # create model config and perform basic setup
 def setup(num_images: int, last_model: str, num_classes: int = 1, epochs: int = 10):
@@ -139,7 +139,7 @@ def setup(num_images: int, last_model: str, num_classes: int = 1, epochs: int = 
 
     cfg.DATASETS.TRAIN = ("train",)
     cfg.DATASETS.TEST = ("val",)
-    cfg.DATALOADER.NUM_WORKERS = 8 # threads
+    cfg.DATALOADER.NUM_WORKERS = 4 # threads
 
     cfg.SOLVER.IMS_PER_BATCH = 4 # batch size
     cfg.SOLVER.BASE_LR = 0.01
@@ -155,7 +155,7 @@ def setup(num_images: int, last_model: str, num_classes: int = 1, epochs: int = 
     cfg.SOLVER.GAMMA = 0.1
     cfg.SOLVER.CHECKPOINT_PERIOD = ims_per_epoch
 
-    cfg.MODEL.ROI_HEADS.BATCH_SIZE_PER_IMAGE = 256
+    cfg.MODEL.ROI_HEADS.BATCH_SIZE_PER_IMAGE = 512
     cfg.MODEL.ROI_HEADS.NUM_CLASSES = num_classes
     return cfg
 
@@ -220,16 +220,16 @@ if (__name__ == '__main__'):
 
         split = basename(dat)
         anno2coco(path_join(dat, "annos"), path_join(dat, "imgs"), dat)
-        register_coco_instance(split, {}, path_join(dat, split + ".json"), path_join(dat + "imgs"))
+        register_coco_instances(split, {}, path_join(dat, split + ".json"),
+                                path_join(dat + "imgs"))
 
         # visualize random samples to confirm data loading correctly
-        test_visuals(temp, split)
+        #test_visuals(temp, split)
 
         # train model on dataset if not previously done
-        if not os.path.isfile(model_file):
-            data = DatasetCatalog.get("train")
-            cfg = setup(len(data), None)
+        data = DatasetCatalog.get("train")
+        cfg = setup(len(data), "")
 
-            go_model(cfg)
+        go_model(cfg)
 
     print ("done")

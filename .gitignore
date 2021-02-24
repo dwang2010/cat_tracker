@@ -2,6 +2,7 @@
 *.tar.gz
 coco
 temp
+output
 
 # temp files
 *.*~
