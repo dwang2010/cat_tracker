@@ -1,0 +1,8 @@
+# archives / expanded archives
+*.tar.gz
+coco
+temp
+
+# temp files
+*.*~
+.*~

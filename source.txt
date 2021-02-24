@@ -1,0 +1,6 @@
+The Oxford-IIIT Pet Dataset
+
+dataset can be downloaded from the following link
+https://www.robots.ox.ac.uk/~vgg/data/pets/
+
+save archives in same directory as cat_tracker.py
