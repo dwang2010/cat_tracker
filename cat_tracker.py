@@ -50,7 +50,7 @@ def split_move(xml_path: str, img_path: str, files: Set[str], out_path: str) -> 
 def anno2coco(xml_path: str, img_path: str, out_path: str) -> None:
     json_dict = defaultdict(list)
 
-    for cls in ["cat", "dog"]:
+    for cls in ["cat"]:
         cat_d = {"id" : len(json_dict["categories"]) + 1,
                  "name" : cls,
                  "supercategory" : "animal"}
@@ -75,7 +75,7 @@ def anno2coco(xml_path: str, img_path: str, out_path: str) -> None:
             ymax = int(seg.find("bndbox/ymax").text)
 
         iid = len(json_dict["images"])
-        cat_id = 1 if species == "cat" else 2
+        cat_id = 1 if species == "cat" else 0
         box_w = xmax - xmin
         box_h = ymax - ymin
 
@@ -93,7 +93,7 @@ def anno2coco(xml_path: str, img_path: str, out_path: str) -> None:
                   "iscrowd"      : 0}
 
         json_dict["images"].append(img_d)
-        json_dict["annotations"].append(anno_d)
+        if cat_id: json_dict["annotations"].append(anno_d)
 
     split = basename(out_path)
     out_file = path_join(out_path, split + ".json")
@@ -125,7 +125,7 @@ class Trainer(DefaultTrainer):
         return COCOEvaluator(dataset_name, cfg, False, output_folder)
 
 # create model config and perform basic setup
-def setup(num_images: int, last_model: str, num_classes: int = 1, epochs: int = 10):
+def setup(num_images: int, last_model: str, num_classes: int = 1, epochs: int = 20):
     cfg = get_cfg()
     cfg.merge_from_file(model_zoo.get_config_file("COCO-Detection/faster_rcnn_R_50_FPN_3x.yaml"))
 
@@ -139,7 +139,8 @@ def setup(num_images: int, last_model: str, num_classes: int = 1, epochs: int = 
 
     cfg.DATASETS.TRAIN = ("train",)
     cfg.DATASETS.TEST = ("val",)
-    cfg.DATALOADER.NUM_WORKERS = 4 # threads
+    cfg.DATALOADER.FILTER_EMPTY_ANNOTATIONS = False
+    cfg.DATALOADER.NUM_WORKERS = 8 # threads
 
     cfg.SOLVER.IMS_PER_BATCH = 4 # batch size
     cfg.SOLVER.BASE_LR = 0.01
@@ -221,15 +222,15 @@ if (__name__ == '__main__'):
         split = basename(dat)
         anno2coco(path_join(dat, "annos"), path_join(dat, "imgs"), dat)
         register_coco_instances(split, {}, path_join(dat, split + ".json"),
-                                path_join(dat + "imgs"))
+                                path_join(dat, "imgs"))
 
         # visualize random samples to confirm data loading correctly
         #test_visuals(temp, split)
 
-        # train model on dataset if not previously done
-        data = DatasetCatalog.get("train")
-        cfg = setup(len(data), "")
+    # train model on dataset if not previously done
+    data = DatasetCatalog.get("train")
+    cfg = setup(len(data), "")
 
-        go_model(cfg)
+    go_model(cfg)
 
     print ("done")
