@@ -3,6 +3,8 @@
 coco
 temp
 output
+model_backup
+__*
 
 # temp files
 *.*~

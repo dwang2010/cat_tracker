@@ -1,4 +1,4 @@
-import threading, base64
+import threading, base64, time
 import cv2, zmq
 import numpy as np
 import WebcamFrameGrabber as WFG
@@ -10,29 +10,34 @@ class Streamer:
         context = zmq.Context()
         self.socket = context.socket(zmq.PUB)
         self.socket.bind("tcp://" + addr + ":" + port)
-        self.run = True
-        self.camera = WFG(0)
-        self.camera.grab_frames()
+        self.camera = WFG.WebcamFrameGrabber(0)
+
+        # camera startup delay
+        time.sleep(1)
+        self.start()
 
     def start(self):
         # start video stream, continually pushing updates to clients
-        while self.run:
-            # get frame, encode to memory buffer
-            frame = self.camera.read()
-            encode_pass, buff = cv2.imencode(".jpg", frame)
+        while True:
+            try:
+                # get frame, encode to memory buffer
+                frame = self.camera.read()
+                encode_pass, buff = cv2.imencode(".jpg", frame)
 
-            # convert image to text, and publish
-            img_str = base64.b64encode(buff)
-            self.socket.send(img_str)
+                # convert image to text, and publish
+                img_str = base64.b64encode(buff)
+                self.socket.send(img_str)
 
-    def stop(self):
-        # stop video stream and cleanup
-        self.run = False
-        self.camera.stop()
+            except KeyboardInterrupt:
+                # stop video feed and cleanup
+                self.camera.stop()
+                cv2.destroyAllWindows()
+                print ("Closing!")
+                break
 
 # blueprint for video feed viewing service
 class Viewer:
-    def __init__(self, addr: str: port: str):
+    def __init__(self, addr: str, port: str):
         # bind to addr to receive incoming image feed
         context = zmq.Context()
         self.socket = context.socket(zmq.SUB)
@@ -42,7 +47,7 @@ class Viewer:
 
     def start(self) -> None:
         # display image feed
-        while True
+        while True:
             try:
                 img_str = self.socket.recv_string()
                 buff = base64.b64decode(img_str)
