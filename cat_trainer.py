@@ -141,7 +141,8 @@ class ModelClass:
                  num_images: int,
                  last_model: str,
                  num_classes: int = 1,
-                 epochs : int = 20) -> None:
+                 epochs : int = 20,
+                 infer_mode: bool = False) -> None:
         """ init ModelClass model config
 
         Args:
@@ -149,6 +150,7 @@ class ModelClass:
             last_model: path to previously trained model, or "" if none
             num_classes: number of distinct object classes in dataset
             epochs: number of times to cycle model through complete dataset
+            infer_mode: configure model for inference only
         """
         cfg = get_cfg()
         cfg.merge_from_file(
@@ -164,48 +166,48 @@ class ModelClass:
             print("loading previous model from: {}".format(last_model))
             cfg.MODEL.WEIGHTS = last_model
 
-        cfg.DATASETS.TRAIN = ("train",)
-        cfg.DATASETS.TEST = ("val",)
-        cfg.DATALOADER.FILTER_EMPTY_ANNOTATIONS = False
-        cfg.DATALOADER.NUM_WORKERS = 8 # threads
+        # configure model for inference, or for training
+        if infer_mode:
+            cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.5
+            self.predictor = DefaultPredictor(cfg)
+        else:
+            cfg.DATASETS.TRAIN = ("train",)
+            cfg.DATASETS.TEST = ("val",)
+            cfg.DATALOADER.FILTER_EMPTY_ANNOTATIONS = False
+            cfg.DATALOADER.NUM_WORKERS = 8 # threads
 
-        cfg.SOLVER.IMS_PER_BATCH = 4 # batch size
-        cfg.SOLVER.BASE_LR = 0.01
+            cfg.SOLVER.IMS_PER_BATCH = 4 # batch size
+            cfg.SOLVER.BASE_LR = 0.01
 
-        ims_per_epoch = num_images // cfg.SOLVER.IMS_PER_BATCH
-        cfg.SOLVER.MAX_ITER = ims_per_epoch * epochs
-        print ("max iterations: {}".format(cfg.SOLVER.MAX_ITER))
+            ims_per_epoch = num_images // cfg.SOLVER.IMS_PER_BATCH
+            cfg.SOLVER.MAX_ITER = ims_per_epoch * epochs
+            print ("max iterations: {}".format(cfg.SOLVER.MAX_ITER))
 
-        # decay learning rate at every epoch (down a decade)
-        ttl = cfg.SOLVER.MAX_ITER
-        lr_deltas = [i for i in range(ttl//epochs, ttl, ttl//epochs)]
-        cfg.SOLVER.STEPS = lr_deltas
-        cfg.SOLVER.GAMMA = 0.1
-        cfg.SOLVER.CHECKPOINT_PERIOD = ims_per_epoch
+            # decay learning rate at every epoch (down a decade)
+            ttl = cfg.SOLVER.MAX_ITER
+            lr_deltas = [i for i in range(ttl//epochs, ttl, ttl//epochs)]
+            cfg.SOLVER.STEPS = lr_deltas
+            cfg.SOLVER.GAMMA = 0.1
+            cfg.SOLVER.CHECKPOINT_PERIOD = ims_per_epoch
 
-        cfg.MODEL.ROI_HEADS.BATCH_SIZE_PER_IMAGE = 512
-        cfg.MODEL.ROI_HEADS.NUM_CLASSES = num_classes
-        self.cfg = cfg
+            cfg.MODEL.ROI_HEADS.BATCH_SIZE_PER_IMAGE = 512
+            cfg.MODEL.ROI_HEADS.NUM_CLASSES = num_classes
+            self.trainer = CustomTrainer(cfg)
+            self.trainer.resume_or_load(resume=False)
 
-    def learn(self):
+    def learn(self) -> None:
         """ performs model training with loaded dataset """
-        print ("CHECKPOINT: TRAINING START")
-        trainer = CustomTrainer(self.cfg)
-        trainer.resume_or_load(resume=False)
-        trainer.train()
-        print ("CHECKPOINT: TRAINING COMPLETE")
+        self.trainer.train()
 
-    def infer(self):
-        """ performs inference on provided images """
-        print ("CHECKPOINT: VALIDATION START")
-        trainer = CustomTrainer(self.cfg)
-        trainer.resume_or_load(resume=False)
-        predictor = DefaultPredictor(self.cfg)
+    def infer(self, image):
+        """ performs inference on provided images
 
-        evaluator = COCOEvaluator("val", ("bbox",), False, output_dir="./output/")
-        val_loader = build_detection_test_loader(self.cfg, "val")
-        print(inference_on_dataset(trainer.model, val_loader, evaluator))
-        print ("CHECKPOINT: VALIDATION COMPLETE")
+        detectron2 takes images as tensors in [channels / height / width] format
+        """
+        outputs = self.predictor(image)
+        v = Visualizer(image[:,:,::-1])
+        img_out = v.draw_instance_predictions(outputs["instances"].to("cpu"))
+        return img_out.get_image()[:,:,::-1]
 
 if (__name__ == '__main__'):
     # folder locations and archive names
