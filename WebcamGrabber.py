@@ -1,9 +1,9 @@
 import threading
 import cv2
 
-# blueprint for threaded webcam image frame retrieval
+# blueprint for threaded webcam frame grabbing
 
-class WebcamFrameGrabber:
+class WebcamGrabber:
     def __init__(self, src: int = 0):
         # open webcam for video capture
         # start capture thread on init
