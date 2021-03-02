@@ -2,6 +2,8 @@ import argparse, base64, time
 import cv2, zmq
 import FrameGrabber as fg
 
+from cat_trainer import ModelClass
+
 class Streamer:
     """
     methods for starting cat tracking video server
@@ -14,6 +16,9 @@ class Streamer:
         self.socket = context.socket(zmq.PUB)
         self.socket.bind(sock)
 
+        # create ModelClass object for detectron2 inference
+        self.model = ModelClass(0, "./model_output/model_final.pth", infer_mode=True)
+
         # start camera process, with startup delay
         self.camera = fg.FrameGrabber(0)
         time.sleep(1)
@@ -23,11 +28,14 @@ class Streamer:
         """ starts video stream, and continually pushes updates to clients """
         while True:
             try:
-                # get frame, encode to memory buffer
+                # collect video frame
                 frame = self.camera.read()
-                encode_pass, buff = cv2.imencode(".jpg", frame)
 
-                # convert image to text, and publish
+                # perform inference on collected frame
+                output = self.model.infer(frame)
+
+                # encode image, convert to text and publish
+                encoded, buff = cv2.imencode(".jpg", output)
                 img_str = base64.b64encode(buff)
                 self.socket.send(img_str)
 
