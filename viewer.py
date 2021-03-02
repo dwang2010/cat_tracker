@@ -41,7 +41,8 @@ if __name__ == "__main__":
     # check for script arguments
     parser = argparse.ArgumentParser()
     parser.add_argument('-a', '--addr', help='server address')
-    parser.add_argument('-p', '--port', help='server port')
+    parser.add_argument('-p', '--port', default="5556",
+                        help='server port')
     args = parser.parse_args()
 
     # start client process for viewing video stream
