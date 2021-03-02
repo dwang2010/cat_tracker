@@ -8,6 +8,11 @@ class WebcamFrameGrabber:
         # open webcam for video capture
         # start capture thread on init
         self.cap = cv2.VideoCapture(src)
+
+        # limit image resolution based on camera specs
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 360)
+
         self.ret = False
         self.frame = None
         self.done = False
