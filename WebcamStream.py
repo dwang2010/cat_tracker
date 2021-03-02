@@ -6,13 +6,14 @@ import WebcamFrameGrabber as WFG
 # blueprint for video feed (source) streaming service
 class Streamer:
     def __init__(self, addr: str, port: str):
-        # connect to addr for pushing image feed
+        # bind to target addr:port for pushing video feed
+        sock = "tcp://" + addr + ":" + port
         context = zmq.Context()
         self.socket = context.socket(zmq.PUB)
-        self.socket.bind("tcp://" + addr + ":" + port)
-        self.camera = WFG.WebcamFrameGrabber(0)
+        self.socket.bind(sock)
 
-        # camera startup delay
+        # start camera process, with startup delay
+        self.camera = WFG.WebcamFrameGrabber(0)
         time.sleep(1)
         self.start()
 
