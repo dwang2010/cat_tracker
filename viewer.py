@@ -2,11 +2,14 @@ import base64, argparse
 import cv2, zmq
 import numpy as np
 
-# blueprint for video feed viewing service
 class Viewer:
+    """
+    methods for client-side video feed viewing
+    """
+
     def __init__(self, addr: str, port: str):
-        # connect to target addr:port to receive incoming video feed
-        sock = "tcp://" + addr + ":" + port
+        """ connects to target addr:port to receive incoming video feed """
+        sock = "tcp://{}:{}".format(addr, port)
         context = zmq.Context()
         self.socket = context.socket(zmq.SUB)
         self.socket.connect(sock)
@@ -16,7 +19,7 @@ class Viewer:
         self.start()
 
     def start(self) -> None:
-        # display image feed
+        """ displays received video feed """
         while True:
             try:
                 # receive string from server, convert to image

@@ -1,23 +1,26 @@
 import argparse, base64, time
 import cv2, zmq
-import WebcamGrabber as wg
+import FrameGrabber as fg
 
-# blueprint for video feed (source) streaming service
 class Streamer:
+    """
+    methods for starting cat tracking video server
+    """
+
     def __init__(self, addr: str, port: str):
-        # bind to target addr:port for pushing video feed
-        sock = "tcp://" + addr + ":" + port
+        """ binds target tcp address for video feed publishing """
+        sock = "tcp://{}:{}".format(addr, port)
         context = zmq.Context()
         self.socket = context.socket(zmq.PUB)
         self.socket.bind(sock)
 
         # start camera process, with startup delay
-        self.camera = wg.WebcamGrabber(0)
+        self.camera = fg.FrameGrabber(0)
         time.sleep(1)
         self.start()
 
     def start(self):
-        # start video stream, continually pushing updates to clients
+        """ starts video stream, and continually pushes updates to clients """
         while True:
             try:
                 # get frame, encode to memory buffer

@@ -1,12 +1,13 @@
 import threading
 import cv2
 
-# blueprint for threaded webcam frame grabbing
+class FrameGrabber:
+    """
+    methods for grabbing webcam image frames
+    """
 
-class WebcamGrabber:
     def __init__(self, src: int = 0):
-        # open webcam for video capture
-        # start capture thread on init
+        """ inits FrameGrabber class, and begins capture thread """
         self.cap = cv2.VideoCapture(src)
 
         # limit image resolution based on camera specs
@@ -19,16 +20,16 @@ class WebcamGrabber:
         threading.Thread(target=self._grab_frames).start()
 
     def _grab_frames(self) -> None:
-        # continually grab frames from webcam
+        """ continually grabs frames from webcam """
         while True:
             if self.done: return
             (self.ret, self.frame) = self.cap.read()
 
     def read(self) -> None:
-        # return last collected frame
+        """ returns last collected frame """
         return self.frame
 
     def stop(self) -> None:
-        # stop collecting / cleanup the process
+        """ stops collection thread and releases camera """
         self.done = True
         self.cap.release()
