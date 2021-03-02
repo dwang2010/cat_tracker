@@ -10,7 +10,8 @@ from detectron2.utils.visualizer import Visualizer
 
 import cv2
 
-from os.path import basename, isdir
+from os import listdir, makedirs
+from os.path import basename, isdir, isfile
 from os.path import join as path_join
 
 import os, random, subprocess, tarfile, json, shutil, math
@@ -18,14 +19,14 @@ import xml.etree.ElementTree as ET
 from collections import defaultdict, Counter
 from typing import List, Dict, Tuple, Set
 
-# extract files from compressed tarfile
 def extract_tar(filepath: str, out_path: str) -> None:
+    """ extracts files from compressed tarfile """
     with tarfile.open(filepath, "r:gz") as f:
         f.extractall(out_path)
 
-# randomly divide annotation files into train (80%) and val (20%) groups
 def split_annotations(xml_path: str) -> Tuple:
-    files = set(f.split(".")[0] for f in os.listdir(xml_path))
+    """ divides annotation files into train (80%) and val (20%) groups """
+    files = set(f.split(".")[0] for f in listdir(xml_path))
     train_len = math.floor( len(files) * 0.8 )
     val_len = len(files) - train_len
 
@@ -33,21 +34,24 @@ def split_annotations(xml_path: str) -> Tuple:
     val = files - train
     return (train, val)
 
-# move annotations + images to target folder, per structure:
-# ./coco/train/imgs/
-#             /annos/
-#             /train_coco.json
 def split_move(xml_path: str, img_path: str, files: Set[str], out_path: str) -> None:
+    """ moves split annotations + images to associated folder structure
+
+    example:
+    ./coco/train/imgs/
+    ./coco/train/annos/
+    """
     img_dir = path_join(out_path, "imgs")
     anno_dir = path_join(out_path, "annos")
-    os.makedirs(img_dir, exist_ok=True)
-    os.makedirs(anno_dir, exist_ok=True)
+    makedirs(img_dir, exist_ok=True)
+    makedirs(anno_dir, exist_ok=True)
 
     for f in files:
         shutil.copy(path_join(xml_path, f + ".xml"), anno_dir)
         shutil.copy(path_join(img_path, f + ".jpg"), img_dir)
 
 def anno2coco(xml_path: str, img_path: str, out_path: str) -> None:
+    """ generates annotations file in coco json format """
     json_dict = defaultdict(list)
 
     for cls in ["cat"]:
@@ -56,7 +60,7 @@ def anno2coco(xml_path: str, img_path: str, out_path: str) -> None:
                  "supercategory" : "animal"}
         json_dict["categories"].append(cat_d)
 
-    for f in os.listdir(xml_path):
+    for f in listdir(xml_path):
         cmn = f.split(".")[0]
         img_file = cmn + ".jpg"
 
@@ -100,8 +104,8 @@ def anno2coco(xml_path: str, img_path: str, out_path: str) -> None:
     with open(out_file, "w") as f:
         print (json.dumps(dict(json_dict)), file=f)
 
-# visualize the annotations
 def test_visuals(out_path: str, split_name: str) -> None:
+    """ selects sample images and visualizes annotations """
     data = DatasetCatalog.get(split_name)
     meta = MetadataCatalog.get(split_name)
 
@@ -111,79 +115,103 @@ def test_visuals(out_path: str, split_name: str) -> None:
         image = cv2.imread(iid)
         v = Visualizer(image[:,:,::-1], metadata=meta)
         out = v.draw_dataset_dict(dat)
-        out_file = os.path.join(out_path, os.path.basename(iid))
+        out_file = path_join(out_path, basename(iid))
         print ("writing", out_file)
         cv2.imwrite(out_file, out.get_image()[:,:,::-1])
 
-class Trainer(DefaultTrainer):
+class CustomTrainer(DefaultTrainer):
+    """
+    method to  ensure model validates against validation set
+    """
+
     @classmethod
     def build_evaluator(cls, cfg, dataset_name, output_folder=None):
         if output_folder is None:
-            path = os.path.join(cfg.OUTPUT_DIR, "evals")
-            os.makedirs(path, exist_ok=True)
+            path = path_join(cfg.OUTPUT_DIR, "evals")
+            makedirs(path, exist_ok=True)
             output_folder = path
         return COCOEvaluator(dataset_name, cfg, False, output_folder)
 
-# create model config and perform basic setup
-def setup(num_images: int, last_model: str, num_classes: int = 1, epochs: int = 20):
-    cfg = get_cfg()
-    cfg.merge_from_file(model_zoo.get_config_file("COCO-Detection/faster_rcnn_R_50_FPN_3x.yaml"))
+class ModelClass:
+    """
+    methods for model configuration and training / inference
+    """
 
-    # retrain from source model or previously trained model
-    os.makedirs(cfg.OUTPUT_DIR, exist_ok=True)
-    if not os.path.isfile(last_model):
-        cfg.MODEL.WEIGHTS = model_zoo.get_checkpoint_url("COCO-Detection/faster_rcnn_R_50_FPN_3x.yaml")
-    else:
-        print("loading previous model from: {}".format(last_model))
-        cfg.MODEL.WEIGHTS = last_model
+    def __init__(self,
+                 num_images: int,
+                 last_model: str,
+                 num_classes: int = 1,
+                 epochs : int = 20) -> None:
+        """ init ModelClass model config
 
-    cfg.DATASETS.TRAIN = ("train",)
-    cfg.DATASETS.TEST = ("val",)
-    cfg.DATALOADER.FILTER_EMPTY_ANNOTATIONS = False
-    cfg.DATALOADER.NUM_WORKERS = 8 # threads
+        Args:
+            num_images: number of images in target dataset
+            last_model: path to previously trained model, or "" if none
+            num_classes: number of distinct object classes in dataset
+            epochs: number of times to cycle model through complete dataset
+        """
+        cfg = get_cfg()
+        cfg.merge_from_file(
+            model_zoo.get_config_file(
+                "COCO-Detection/faster_rcnn_R_50_FPN_3x.yaml"))
 
-    cfg.SOLVER.IMS_PER_BATCH = 4 # batch size
-    cfg.SOLVER.BASE_LR = 0.01
+        # retrain from source model or previously trained model
+        makedirs(cfg.OUTPUT_DIR, exist_ok=True)
+        if not isfile(last_model):
+            cfg.MODEL.WEIGHTS = model_zoo.get_checkpoint_url(
+                "COCO-Detection/faster_rcnn_R_50_FPN_3x.yaml")
+        else:
+            print("loading previous model from: {}".format(last_model))
+            cfg.MODEL.WEIGHTS = last_model
 
-    ims_per_epoch = num_images // cfg.SOLVER.IMS_PER_BATCH
-    cfg.SOLVER.MAX_ITER = ims_per_epoch * epochs
-    print ("max iterations: {}".format(cfg.SOLVER.MAX_ITER))
+        cfg.DATASETS.TRAIN = ("train",)
+        cfg.DATASETS.TEST = ("val",)
+        cfg.DATALOADER.FILTER_EMPTY_ANNOTATIONS = False
+        cfg.DATALOADER.NUM_WORKERS = 8 # threads
 
-    # decay learning rate at every epoch (down a decade)
-    ttl = cfg.SOLVER.MAX_ITER
-    lr_deltas = [i for i in range(ttl//epochs, ttl, ttl//epochs)]
-    cfg.SOLVER.STEPS = lr_deltas
-    cfg.SOLVER.GAMMA = 0.1
-    cfg.SOLVER.CHECKPOINT_PERIOD = ims_per_epoch
+        cfg.SOLVER.IMS_PER_BATCH = 4 # batch size
+        cfg.SOLVER.BASE_LR = 0.01
 
-    cfg.MODEL.ROI_HEADS.BATCH_SIZE_PER_IMAGE = 512
-    cfg.MODEL.ROI_HEADS.NUM_CLASSES = num_classes
-    return cfg
+        ims_per_epoch = num_images // cfg.SOLVER.IMS_PER_BATCH
+        cfg.SOLVER.MAX_ITER = ims_per_epoch * epochs
+        print ("max iterations: {}".format(cfg.SOLVER.MAX_ITER))
 
-# train the model
-def go_model(cfg):
-    print ("CHECKPOINT: TRAINING START")
-    trainer = Trainer(cfg)
-    trainer.resume_or_load(resume=False)
-    trainer.train()
-    print ("CHECKPOINT: TRAINING COMPLETE")
+        # decay learning rate at every epoch (down a decade)
+        ttl = cfg.SOLVER.MAX_ITER
+        lr_deltas = [i for i in range(ttl//epochs, ttl, ttl//epochs)]
+        cfg.SOLVER.STEPS = lr_deltas
+        cfg.SOLVER.GAMMA = 0.1
+        cfg.SOLVER.CHECKPOINT_PERIOD = ims_per_epoch
 
-def go_test(cfg):
-    print ("CHECKPOINT: VALIDATION START")
-    trainer = Trainer(cfg)
-    trainer.resume_or_load(resume=False)
-    predictor = DefaultPredictor(cfg)
+        cfg.MODEL.ROI_HEADS.BATCH_SIZE_PER_IMAGE = 512
+        cfg.MODEL.ROI_HEADS.NUM_CLASSES = num_classes
+        self.cfg = cfg
 
-    evaluator = COCOEvaluator("val", ("bbox",), False, output_dir="./output/")
-    val_loader = build_detection_test_loader(cfg, "val")
-    print(inference_on_dataset(trainer.model, val_loader, evaluator))
-    print ("CHECKPOINT: VALIDATION COMPLETE")
+    def learn(self):
+        """ performs model training with loaded dataset """
+        print ("CHECKPOINT: TRAINING START")
+        trainer = CustomTrainer(self.cfg)
+        trainer.resume_or_load(resume=False)
+        trainer.train()
+        print ("CHECKPOINT: TRAINING COMPLETE")
+
+    def infer(self):
+        """ performs inference on provided images """
+        print ("CHECKPOINT: VALIDATION START")
+        trainer = CustomTrainer(self.cfg)
+        trainer.resume_or_load(resume=False)
+        predictor = DefaultPredictor(self.cfg)
+
+        evaluator = COCOEvaluator("val", ("bbox",), False, output_dir="./output/")
+        val_loader = build_detection_test_loader(self.cfg, "val")
+        print(inference_on_dataset(trainer.model, val_loader, evaluator))
+        print ("CHECKPOINT: VALIDATION COMPLETE")
 
 if (__name__ == '__main__'):
     # folder locations and archive names
     base = "./"
     temp = path_join(base, "temp")
-    os.makedirs(temp, exist_ok=True)
+    makedirs(temp, exist_ok=True)
 
     arch_annos = "annotations.tar.gz"
     arch_imgs  = "images.tar.gz"
@@ -214,7 +242,7 @@ if (__name__ == '__main__'):
     MetadataCatalog.clear()
 
     for dat in [train, val]:
-        files = os.listdir(path_join(dat, "imgs"))
+        files = listdir(path_join(dat, "imgs"))
         samples = len(files)
         cat_cnt = sum(f[0].isupper() for f in files)
         print (dat, "({}/{}) cats".format(cat_cnt, samples))
@@ -228,9 +256,12 @@ if (__name__ == '__main__'):
         #test_visuals(temp, split)
 
     # train model on dataset if not previously done
-    data = DatasetCatalog.get("train")
-    cfg = setup(len(data), "")
+    if not isfile("./model_backup/model_final.pth"):
+        data = DatasetCatalog.get("train")
+        model = ModelClass(len(data), "")
 
-    go_model(cfg)
+        model.learn()
+    else:
+        print ("previously trained model found, skipping ...")
 
     print ("done")
