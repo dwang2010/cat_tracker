@@ -25,15 +25,24 @@ class Streamer:
 
         # start camera process, with startup delay
         self.camera = fg.FrameGrabber(0)
+        self.camera.start()
         time.sleep(1)
+
+        # start video stream
         self.start()
 
     def start(self):
         """ starts video stream, and continually pushes updates to clients """
         while True:
             try:
-                # collect video frame
+                # collect video frame and scale down frame size
                 frame = self.camera.read()
+
+                scale = 50
+                width = int(frame.shape[1] * scale / 100)
+                height = int(frame.shape[0] * scale / 100)
+                frame = cv2.resize(frame, (width, height),
+                                   interpolation = cv2.INTER_AREA)
 
                 # perform inference on collected frame
                 output = self.model.infer(frame)

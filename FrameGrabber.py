@@ -7,16 +7,18 @@ class FrameGrabber:
     """
 
     def __init__(self, src: int = 0):
-        """ inits FrameGrabber class, and begins capture thread """
+        """ inits FrameGrabber class """
         self.cap = cv2.VideoCapture(src)
 
         # limit image resolution based on camera specs
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 360)
 
-        self.ret = False
-        self.frame = None
+        self.ret, self.frame = self.cap.read()
         self.done = False
+
+    def start(self) -> None:
+        """ start frame capture thread """
         threading.Thread(target=self._grab_frames).start()
 
     def _grab_frames(self) -> None:
