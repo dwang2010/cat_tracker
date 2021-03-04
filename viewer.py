@@ -1,5 +1,5 @@
 import base64, argparse
-import cv2, zmq
+import cv2, zmq, imutils
 import numpy as np
 
 class Viewer:
@@ -26,10 +26,12 @@ class Viewer:
                 img_str = self.socket.recv_string()
                 buff = base64.b64decode(img_str)
                 image = np.fromstring(buff, dtype=np.uint8)
-                source = cv2.imdecode(image, 1)
+                frame = cv2.imdecode(image, 1)
+
+                frame = imutils.resize(frame, width=1024)
 
                 # display image
-                cv2.imshow("Cat Tracker", source)
+                cv2.imshow("Cat Tracker", frame)
                 cv2.waitKey(1)
 
             except KeyboardInterrupt:
@@ -40,7 +42,8 @@ class Viewer:
 if __name__ == "__main__":
     # check for script arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument('-a', '--addr', help='server address')
+    parser.add_argument('-a', '--addr', default="192.168.55.1",
+                        help='server address')
     parser.add_argument('-p', '--port', default="5556",
                         help='server port')
     args = parser.parse_args()
