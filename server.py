@@ -24,33 +24,28 @@ class Streamer:
         self.model.cfg_load(cfg, weights)
 
         # start camera process, with startup delay
-        self.camera = fg.FrameGrabber(0)
-        self.camera.start()
-        time.sleep(1)
-
-        # start video stream
-        self.start()
+        self.camera = fg.FrameGrabber(width=640, height=480)
+        self.camera.start_cap()
 
     def start(self):
         """ starts video stream, and continually pushes updates to clients """
         while True:
             try:
+                t1 = time.time()
                 # collect video frame and scale down frame size
                 frame = self.camera.read()
 
-                scale = 50
-                width = int(frame.shape[1] * scale / 100)
-                height = int(frame.shape[0] * scale / 100)
-                frame = cv2.resize(frame, (width, height),
-                                   interpolation = cv2.INTER_AREA)
-
+                t2 = time.time()
                 # perform inference on collected frame
-                output = self.model.infer(frame)
+                frame = self.model.infer(frame)
 
+                t3 = time.time()
                 # encode image, convert to text and publish
-                encoded, buff = cv2.imencode(".jpg", output)
+                encoded, buff = cv2.imencode(".jpg", frame)
                 img_str = base64.b64encode(buff)
                 self.socket.send(img_str)
+                t4 = time.time()
+                print ("{}, {}, {}".format(t2-t1, t3-t2, t4-t3))
 
             except KeyboardInterrupt:
                 # stop video feed and cleanup
@@ -72,4 +67,6 @@ if __name__ == "__main__":
 
     print ("Starting server...")
     serve = Streamer(args.addr, args.port, args.model)
+    time.sleep(1)
+    serve.start()
     print ("Shutting down...")
